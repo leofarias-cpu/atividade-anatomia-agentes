@@ -1,11 +1,11 @@
 import inspect
 import json
 import os
-
-from openai import OpenAI
-from dotenv import load_dotenv
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 
@@ -37,6 +37,7 @@ YOU_COLOR = "\u001b[94m"
 ASSISTANT_COLOR = "\u001b[93m"
 RESET_COLOR = "\u001b[0m"
 
+
 def resolve_abs_path(path_str: str) -> Path:
     """
     file.py -> /Users/home/mihail/modern-software-dev-lectures/file.py
@@ -45,6 +46,7 @@ def resolve_abs_path(path_str: str) -> Path:
     if not path.is_absolute():
         path = (Path.cwd() / path).resolve()
     return path
+
 
 def read_file_tool(filename: str) -> Dict[str, Any]:
     """
@@ -56,10 +58,8 @@ def read_file_tool(filename: str) -> Dict[str, Any]:
     print(full_path)
     with open(str(full_path), "r") as f:
         content = f.read()
-    return {
-        "file_path": str(full_path),
-        "content": content
-    }
+    return {"file_path": str(full_path), "content": content}
+
 
 def list_files_tool(path: str) -> Dict[str, Any]:
     """
@@ -70,14 +70,11 @@ def list_files_tool(path: str) -> Dict[str, Any]:
     full_path = resolve_abs_path(path)
     all_files = []
     for item in full_path.iterdir():
-        all_files.append({
-            "filename": item.name,
-            "type": "file" if item.is_file() else "dir"
-        })
-    return {
-        "path": str(full_path),
-        "files": all_files
-    }
+        all_files.append(
+            {"filename": item.name, "type": "file" if item.is_file() else "dir"}
+        )
+    return {"path": str(full_path), "files": all_files}
+
 
 def edit_file_tool(path: str, old_str: str, new_str: str) -> Dict[str, Any]:
     """
@@ -91,29 +88,21 @@ def edit_file_tool(path: str, old_str: str, new_str: str) -> Dict[str, Any]:
     full_path = resolve_abs_path(path)
     if old_str == "":
         full_path.write_text(new_str, encoding="utf-8")
-        return {
-            "path": str(full_path),
-            "action": "created_file"
-        }
+        return {"path": str(full_path), "action": "created_file"}
     original = full_path.read_text(encoding="utf-8")
     if original.find(old_str) == -1:
-        return {
-            "path": str(full_path),
-            "action": "old_str not found"
-        }
+        return {"path": str(full_path), "action": "old_str not found"}
     edited = original.replace(old_str, new_str, 1)
     full_path.write_text(edited, encoding="utf-8")
-    return {
-        "path": str(full_path),
-        "action": "edited"
-    }
+    return {"path": str(full_path), "action": "edited"}
 
 
 TOOL_REGISTRY = {
     "read_file": read_file_tool,
     "list_files": list_files_tool,
-    "edit_file": edit_file_tool
+    "edit_file": edit_file_tool,
 }
+
 
 def get_tool_str_representation(tool_name: str) -> str:
     tool = TOOL_REGISTRY[tool_name]
@@ -123,12 +112,14 @@ def get_tool_str_representation(tool_name: str) -> str:
     Signature: {inspect.signature(tool)}
     """
 
+
 def get_full_system_prompt():
     tool_str_repr = ""
     for tool_name in TOOL_REGISTRY:
         tool_str_repr += "TOOL\n===" + get_tool_str_representation(tool_name)
         tool_str_repr += f"\n{'=' * 15}\n"
     return SYSTEM_PROMPT.format(tool_list_repr=tool_str_repr)
+
 
 def extract_tool_invocations(text: str) -> List[Tuple[str, Dict[str, Any]]]:
     """
@@ -141,7 +132,7 @@ def extract_tool_invocations(text: str) -> List[Tuple[str, Dict[str, Any]]]:
         if not line.startswith("tool:"):
             continue
         try:
-            after = line[len("tool:"):].strip()
+            after = line[len("tool:") :].strip()
             name, rest = after.split("(", 1)
             name = name.strip()
             if not rest.endswith(")"):
@@ -153,40 +144,38 @@ def extract_tool_invocations(text: str) -> List[Tuple[str, Dict[str, Any]]]:
             continue
     return invocations
 
+
 def execute_llm_call(conversation: List[Dict[str, str]]):
     response = openai_client.chat.completions.create(
-        model="qwen/qwen3.8-27b",
-        messages=conversation,
-        max_completion_tokens=2000
+        model="qwen/qwen3.8-27b", messages=conversation, max_completion_tokens=2000
     )
     return response.choices[0].message.content
 
+
 def run_coding_agent_loop():
     print(get_full_system_prompt())
-    conversation = [{
-        "role": "system",
-        "content": get_full_system_prompt()
-    }]
+    conversation = [{"role": "system", "content": get_full_system_prompt()}]
     while True:
         try:
             user_input = input(f"{YOU_COLOR}You:{RESET_COLOR}:")
         except (KeyboardInterrupt, EOFError):
             break
-        conversation.append({
-            "role": "user",
-            "content": user_input.strip()
-        })
+        conversation.append({"role": "user", "content": user_input.strip()})
+
         while True:
             assistant_response = execute_llm_call(conversation)
+            print(f"{'=' * 10}\n+ thought: {assistant_response} \n{'=' * 10}")
+
             tool_invocations = extract_tool_invocations(assistant_response)
             if not tool_invocations:
                 print(f"{ASSISTANT_COLOR}Assistant:{RESET_COLOR}: {assistant_response}")
-                conversation.append({
-                    "role": "assistant",
-                    "content": assistant_response
-                })
+                conversation.append(
+                    {"role": "assistant", "content": assistant_response}
+                )
                 break
             for name, args in tool_invocations:
+                print(f"{'=' * 10}\n+ tool: {name=}: {args=} \n{'=' * 10}")
+
                 tool = TOOL_REGISTRY[name]
                 resp = ""
                 print(name, args)
@@ -195,13 +184,15 @@ def run_coding_agent_loop():
                 elif name == "list_files":
                     resp = tool(args.get("path", "."))
                 elif name == "edit_file":
-                    resp = tool(args.get("path", "."),
-                                args.get("old_str", ""),
-                                args.get("new_str", ""))
-                conversation.append({
-                    "role": "user",
-                    "content": f"tool_result({json.dumps(resp)})"
-                })
+                    resp = tool(
+                        args.get("path", "."),
+                        args.get("old_str", ""),
+                        args.get("new_str", ""),
+                    )
+                conversation.append(
+                    {"role": "user", "content": f"tool_result({json.dumps(resp)})"}
+                )
+                print(f"{'=' * 10}\n+ observation: {resp} \n{'=' * 10}")
 
 
 if __name__ == "__main__":
